@@ -1,0 +1,166 @@
+{% macro voyager_contract_link(address, label) %}
+    {%- if address -%}
+        <a href="https://
+                {%- if chain_id != 'mainnet' -%}{{ chain_id }}.{% endif %}voyager.online/contract/{{ address }}"
+           target="_blank">{{- label -}}</a>
+    {%- else -%}
+        {{- label -}}
+    {%- endif -%}
+{% endmacro %}
+
+{% macro voyager_transaction_link(tx_hash) %}
+    <a style="color: darkgreen" href="https://
+            {%- if chain_id != 'mainnet' -%}{{ chain_id }}.{% endif %}voyager.online/tx/{{ tx_hash }}"
+       target="_blank">{{- tx_hash -}}</a>
+{% endmacro %}
+
+{%- macro voyager_block_link(block_hash) -%}
+    <a style="color: darkred" href="https://
+            {%- if chain_id != 'mainnet' -%}{{ chain_id }}.{% endif %}voyager.online/block/{{ block_hash }}"
+       target="_blank">{{- block_hash -}}</a>
+{%- endmacro -%}
+
+{% macro etherscan_address_link(address, label, badge="") %}
+    {%- if address -%}
+        <a href="https://etherscan.io/address/{{ address }}" target="_blank">
+            {{- label -}}
+        </a>
+    {%- else -%}
+        {{- label -}}
+    {%- endif -%}
+{% endmacro %}
+
+{%- macro print_call_arguments(arguments) -%}
+    {%- if arguments is not none -%}
+        {%- for argument in arguments -%}
+            {% if argument.type != "ignore" %}
+                {%- if loop.index > 1 -%}, {% endif %}
+                {%- if argument.name == "[no ABI]" -%}
+                    <span class="badge badge-danger">no_ABI</span>
+                {%- else -%}
+                    {%- if argument.name %}<span style='color: darkred'>{{- argument.name -}}=</span>{%- endif -%}
+                    {%- if argument.type == "tuple" -%}
+                        ({{- print_call_arguments(argument.value) -}})
+                    {%- elif argument.type == "tuple[]" -%}
+                        [
+                        {%- for sub_arg in argument.value -%}
+                            {%- if loop.index > 1 -%}, {% endif %}
+                            ({{- print_call_arguments(sub_arg) -}})
+                        {%- endfor -%}
+                        ]
+                    {%- elif argument.type == "address" -%}
+                        {{- address_link(argument.value.address, argument.value.name, argument.value.badge) -}}
+                    {%- elif argument.type == "nft" -%}
+                        {{- nft_link(argument.value.address, argument.value.name) -}}
+                    {% elif argument.type == "call" %}
+                        {{- address_link(argument.value.address, argument.value.name, argument.value.badge) -}}.
+                        <span style="color: darkgreen">{{- argument.value.function_name -}}</span>(
+                        {{- print_event_arguments(argument.value.arguments) -}})
+                    {%- else -%}
+                        {{- argument.value -}}
+                    {%- endif -%}
+                {%- endif -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+{%- endmacro -%}
+
+{%- macro print_call_line(call) -%}
+    <li id="{{ call.call_id }}"
+        class="indent-{{ call.indent }} {% if call.indent < 6 %}expanded{% endif %}">
+        <p>
+            {% if call.type == 'INVOKE_FUNCTION' %}
+                <span>{{- voyager_contract_link(call.contract, call.contract[:10]) -}}</span><span style='color: darkgreen'>.{{- call.function -}}</span><span>({{- print_call_arguments(call.inputs) -}}) => ({{- print_call_arguments(call.outputs) -}})</span>
+            {% elif call.type == 'DEPLOY' %}
+                <span>{{ voyager_contract_link(call.contract, call.contract[:10]) }}</span>.<span style='color: darkgreen'>deploy</span><span>({{- print_call_arguments(call.inputs) -}})</span>
+            {% endif %}
+        </p>
+        <ul>
+            {% for sub_call in call.calls %}
+                {{- print_call_line(sub_call) -}}
+            {% endfor %}
+        </ul>
+    </li>
+{%- endmacro -%}
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>StarkTx.info Simulation</title>
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.2/skin-themeroller/ui.fancytree.min.css"
+      integrity="sha512-LtulT9+xwtALkeFjtiojm4zOrWyDR+qivwmAKI8DSMdtJnJP/cXlV2TfwbiGe3m4nHoWy2Jbgg+I7BKHqqo2Jg=="
+      crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"
+      integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ=="
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.2/jquery.fancytree-all-deps.min.js"
+      integrity="sha512-8Fstaj+d8Fha0qzgW/bGQpyG4NcVSYcmflfYOzhV1z/4/SYwf96rqrANH+lUmO7ZSq9WgRDYgASFiiq20bgK7g=="
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="/static/starktx.css" rel="stylesheet">
+</head>
+
+<body>
+    <h2>
+        StarkTx.info Simulation
+    </h2>
+    {% if decoded_events %}
+        <div class="calls">
+            <h3>Emitted events:</h3>
+            <div id="ev_tree">
+                <ul class="tree">
+                    <li>
+                        {% for event in decoded_events %}
+                            <p style="margin-bottom: 5px">
+                                <span>{{event.contract[:10]}}.</span><span style='color: darkgreen'>{{ event.name }}</span><span>({{- print_call_arguments(event.parameters) -}})</span>
+                            </p><br>
+                        {% endfor %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+    {% endif %}
+    <div class="calls">
+        <h3>Execution trace:</h3>
+        <div id="tree">
+            <ul class="tree">
+                <p>
+                    {{- print_call_line(decoded_trace) -}}
+                </p>
+            </ul>
+        </div>
+    </div>
+
+    <div class="calls">
+        <h3>Raw trace:</h3>
+        <pre>
+            {{ trace }}
+        </pre>
+    </div>
+
+    <div class="calls">
+        <h3>Decoded trace:</h3>
+        <pre>
+            {{ decoded_trace_json }}
+        </pre>
+    </div>
+
+    <script>
+        $(document).ready(() => {
+            $("#tree").fancytree({
+                minExpandLevel: 2,
+                toggleEffect: false,
+            });
+            $("#ev_tree").fancytree({
+                minExpandLevel: 2,
+                toggleEffect: false,
+            });
+            $("#tx_tree").fancytree({
+                minExpandLevel: 2,
+                toggleEffect: false,
+            });
+        });
+    </script>
+</body>
+</html>
