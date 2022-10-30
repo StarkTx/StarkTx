@@ -5,7 +5,7 @@ description = ""
 authors = ["Tomasz Mierzwa <tomek@tfi.team>, Karol Chojnowski <karol@tfi.team>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 Flask = "^2.0.2"
 web3 = "^5.25.0"
 cairo-lang = "^0.6.1"
